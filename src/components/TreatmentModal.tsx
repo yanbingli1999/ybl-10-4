@@ -4,7 +4,7 @@ import { useGameStore, guessDiseaseFromSymptoms } from "@/store/gameStore";
 import {
   BREEDS, HERBS, PRESCRIPTIONS,
   SEVERITY_NAMES, SEVERITY_COLORS, DISEASE_NAMES,
-  ELEMENT_EMOJI, ELEMENT_NAMES,
+  ELEMENT_EMOJI, ELEMENT_NAMES, CATEGORY_LABELS,
 } from "@/data/gameData";
 import type { Bed, DiseaseType } from "@/types/game";
 
@@ -49,6 +49,25 @@ export function TreatmentModal({ open, onClose, targetBed }: TreatmentModalProps
     if (!playerDiagnosis) return null;
     return PRESCRIPTIONS.find(p => p.disease === playerDiagnosis) || null;
   }, [playerDiagnosis]);
+
+  const acceptedContent = useMemo(() => {
+    if (!beast) return [];
+    return beast.ownerStatement.statements
+      .filter(st => {
+        const keyTruth = `${st.id}-truth`;
+        const keyLie = `${st.id}-lie`;
+        return beast.ownerStatement.acceptedContent.includes(keyTruth) || beast.ownerStatement.acceptedContent.includes(keyLie);
+      })
+      .map(st => {
+        const keyTruth = `${st.id}-truth`;
+        const isTruth = beast.ownerStatement.acceptedContent.includes(keyTruth);
+        return {
+          ...st,
+          acceptedAsTruth: isTruth,
+          content: isTruth ? st.truth : st.initialStatement,
+        };
+      });
+  }, [beast]);
 
   useEffect(() => {
     if (open) {
@@ -152,6 +171,44 @@ export function TreatmentModal({ open, onClose, targetBed }: TreatmentModalProps
                 </span>
               ))}
             </div>
+
+            {acceptedContent.length > 0 && (
+              <div className="border-t border-clinic-border/30 pt-3 mb-2">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Sparkles className="w-4 h-4 text-clinic-amber" />
+                  <span className="text-xs font-semibold text-clinic-deep">已采信信息</span>
+                  <span className="text-[10px] text-gray-400 ml-auto">
+                    可信度 {beast.ownerStatement.credibility}%
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {acceptedContent.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`p-2 rounded-lg text-[11px] border ${
+                        item.acceptedAsTruth
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                          : "bg-amber-50 border-amber-200 text-amber-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <span className="text-[10px] font-medium">
+                          {CATEGORY_LABELS[item.category]}
+                        </span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded ${
+                          item.acceptedAsTruth
+                            ? "bg-emerald-200 text-emerald-800"
+                            : "bg-amber-200 text-amber-800"
+                        }`}>
+                          {item.acceptedAsTruth ? "真相" : "陈述"}
+                        </span>
+                      </div>
+                      <div className="leading-relaxed">「{item.content}」</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="border-t border-clinic-border/30 pt-3">
               <div className="flex items-center gap-1.5 mb-2">

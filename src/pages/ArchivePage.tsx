@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { BookOpen, Heart, Star, Award, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { useGameStore } from "@/store/gameStore";
-import { BREEDS, DISEASE_NAMES, SEVERITY_NAMES, HERBS } from "@/data/gameData";
+import { BREEDS, DISEASE_NAMES, SEVERITY_NAMES, HERBS, CATEGORY_LABELS } from "@/data/gameData";
 import { ELEMENT_EMOJI, ELEMENT_NAMES } from "@/data/gameData";
 
 export default function ArchivePage() {
@@ -200,6 +200,81 @@ export default function ArchivePage() {
                           <div className="text-clinic-deep italic">「{r.notes}」</div>
                         </div>
                       </div>
+
+                      {(r.ownerAcceptedContent?.length > 0 || r.consequence) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                          {r.ownerAcceptedContent?.length > 0 && (
+                            <div className="p-2 rounded-lg bg-white/60">
+                              <div className="text-gray-500 mb-1 flex items-center gap-1">
+                                <span>📋</span> 采信内容
+                                <span className="ml-auto text-[10px] text-gray-400">
+                                  追问 {r.followUpCount} 次 · 可信度 {r.finalCredibility}%
+                                </span>
+                              </div>
+                              <div className="space-y-1">
+                                {r.ownerAcceptedContent.map((content, i) => (
+                                  <div
+                                    key={i}
+                                    className={`text-[11px] p-1.5 rounded ${
+                                      content.startsWith("✓")
+                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                        : "bg-amber-50 text-amber-700 border border-amber-100"
+                                    }`}
+                                  >
+                                    {content}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {r.consequence && (
+                            <div className={`p-2 rounded-lg ${
+                              r.consequence.type === "success"
+                                ? "bg-emerald-50/80 border border-emerald-200"
+                                : "bg-rose-50/80 border border-rose-200"
+                            }`}>
+                              <div className={`mb-1 font-medium ${
+                                r.consequence.type === "success" ? "text-emerald-700" : "text-rose-700"
+                              }`}>
+                                {r.consequence.type === "success" ? "✨ 治疗结果" : "⚠️ 误诊原因"}
+                              </div>
+                              <div className={`text-[11px] ${
+                                r.consequence.type === "success" ? "text-emerald-600" : "text-rose-600"
+                              }`}>
+                                {r.consequence.description}
+                              </div>
+                              {r.consequence.missedSymptom && (
+                                <div className="mt-1 text-[10px] text-gray-500">
+                                  遗漏症状：{r.consequence.missedSymptom}
+                                </div>
+                              )}
+                              {r.consequence.misdiagnosedDisease && (
+                                <div className="mt-1 text-[10px] text-gray-500">
+                                  误诊为：{DISEASE_NAMES[r.consequence.misdiagnosedDisease]}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {r.ownerStatements?.length > 0 && (
+                        <div className="mt-2 p-2 rounded-lg bg-gray-50/60 border border-gray-200">
+                          <div className="text-gray-500 mb-1 text-[11px]">🔍 完整主人陈述记录</div>
+                          <div className="space-y-1">
+                            {r.ownerStatements.map((stmt, i) => (
+                              <div key={i} className="text-[10px] text-gray-600">
+                                <span className="font-medium">{CATEGORY_LABELS[stmt.category]}：</span>
+                                <span className="text-gray-500">「{stmt.initialStatement}」</span>
+                                {stmt.isTruthRevealed && (
+                                  <span className="text-emerald-600 ml-1">→ 真相：「{stmt.truth}」</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

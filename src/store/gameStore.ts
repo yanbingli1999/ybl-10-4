@@ -26,7 +26,17 @@ import {
   NOTES_SUCCESS,
   NOTES_FAIL,
   DISEASE_NAMES,
+  FEEDING_STATEMENTS,
+  INJURY_STATEMENTS,
+  ONSET_STATEMENTS,
+  CATEGORY_LABELS,
 } from "@/data/gameData";
+import type {
+  OwnerStatement,
+  OwnerStatementState,
+  StatementCategory,
+  FollowUpConsequence,
+} from "@/types/game";
 
 const DISEASE_TYPES: DiseaseType[] = [
   "fever", "cold", "poisoning", "fatigue", "fracture",
@@ -54,18 +64,88 @@ function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function generateOwnerStatement(category: StatementCategory): OwnerStatement {
+  const templates = {
+    feeding: FEEDING_STATEMENTS,
+    injury: INJURY_STATEMENTS,
+    onset_time: ONSET_STATEMENTS,
+  };
+  const template = rand(templates[category]);
+  return {
+    id: uid("stmt"),
+    category,
+    initialStatement: template.lie,
+    truth: template.truth,
+    isTruthRevealed: false,
+    followUpQuestions: template.questions,
+    revealedQuestions: 0,
+  };
+}
+
+function generateOwnerStatementState(): OwnerStatementState {
+  const categories: StatementCategory[] = ["feeding", "injury", "onset_time"];
+  const numStatements = randomInt(1, 3);
+  const shuffled = [...categories].sort(() => Math.random() - 0.5);
+  const selected = shuffled.slice(0, numStatements);
+
+  const statements: OwnerStatement[] = selected.map(cat => generateOwnerStatement(cat));
+  const baseCredibility = randomInt(40, 80);
+
+  return {
+    statements,
+    credibility: baseCredibility,
+    followUpCount: 0,
+    maxFollowUps: statements.length * 3,
+    acceptedContent: [],
+  };
+}
+
+function getHiddenSymptomsForTruth(truth: string, allSymptoms: string[]): string[] {
+  const symptomHints: Record<string, string[]> = {
+    "中毒": ["呕吐", "腹泻", "口中异味", "瞳孔异常", "皮毛变色"],
+    "骨折": ["肢体肿胀", "行动不便", "触碰尖叫", "骨骼异响", "无法站立"],
+    "旧疾": ["体温偏高", "无精打采", "食欲不振", "嗜睡"],
+    "寄生虫": ["瘙痒难忍", "皮毛脱落", "食量暴增但消瘦", "粪便异常"],
+    "灵力紊乱": ["魔力溢出", "无意识施法", "元素暴走", "光环混乱"],
+    "发烧": ["体温偏高", "鼻子发干", "魔力发热"],
+    "脱水": ["口干舌燥", "皮肤弹性差", "尿液深黄", "眼窝凹陷"],
+    "中毒草": ["呕吐", "口中异味", "瞳孔异常", "皮毛变色"],
+    "过期丹药": ["魔力失控", "元素暴走", "无意识施法"],
+    "污水": ["腹泻", "粪便异常", "呕吐", "皮肤凸起"],
+    "斗兽场": ["肢体肿胀", "行动不便", "触碰尖叫", "无法站立"],
+    "暗劲": ["魔力耗尽", "眼神空洞", "反应迟缓", "灵气暴走"],
+    "虐待": ["触碰尖叫", "肢体肿胀", "行动不便", "皮肤凸起"],
+    "拖延": ["体温偏高", "无精打采", "食欲不振", "嗜睡", "反应迟缓"],
+  };
+
+  const hidden: string[] = [];
+  for (const [keyword, symptoms] of Object.entries(symptomHints)) {
+    if (truth.includes(keyword)) {
+      for (const sym of symptoms) {
+        if (allSymptoms.includes(sym) && !hidden.includes(sym)) {
+          hidden.push(sym);
+        }
+      }
+    }
+  }
+  return hidden;
+}
+
 export function generateRandomBeast(day: number, time: number): Beast {
   const breed = rand(BREEDS.filter(b => b.rarity <= Math.min(5, 2 + Math.floor(day / 5))));
   const disease = rand(DISEASE_TYPES);
   const sevIdx = Math.min(3, Math.floor(Math.random() * Math.min(4, 1 + Math.floor(day / 4))));
   const severity = SEVERITIES[sevIdx].sev;
   const allSyms = DISEASE_SYMPTOMS[disease];
-  const symCount = randomInt(2, 4);
-  const picked: string[] = [];
-  while (picked.length < symCount) {
+  const ownerStatement = generateOwnerStatementState();
+
+  const revealedSymCount = randomInt(2, 3);
+  const revealedSyms: string[] = [];
+  while (revealedSyms.length < revealedSymCount) {
     const s = rand(allSyms);
-    if (!picked.includes(s)) picked.push(s);
+    if (!revealedSyms.includes(s)) revealedSyms.push(s);
   }
+
   return {
     id: uid("beast"),
     breedId: breed.id,
@@ -74,12 +154,14 @@ export function generateRandomBeast(day: number, time: number): Beast {
     stage: 0,
     disease,
     severity,
-    symptoms: picked,
+    symptoms: revealedSyms,
+    allSymptoms: allSyms,
     trustLevel: randomInt(0, 20),
     waitHours: 0,
     satisfaction: 100,
     ownerName: rand(OWNER_NAMES),
     arrivedAt: time,
+    ownerStatement,
   };
 }
 
@@ -133,6 +215,8 @@ export interface GameState {
   clearNotification: (id: string) => void;
   resetGame: () => void;
   tickGame: (steps?: number) => void;
+  followUpQuestion: (beastId: string, statementId: string, questionIndex: number) => void;
+  toggleAcceptStatement: (beastId: string, statementId: string, accept: boolean) => void;
   _spawnInitialBeasts: () => void;
   _addTransaction: (type: Transaction["type"], category: string, amount: number, description: string) => void;
   _dailySettlement: () => void;
@@ -225,6 +309,115 @@ export const useGameStore = create<GameState>()(
         set({ waitingQueue: initial });
       },
 
+      followUpQuestion: (beastId, statementId, questionIndex) => {
+        const s = get();
+        const beast = s.waitingQueue.find(b => b.id === beastId);
+        if (!beast) return;
+
+        const statement = beast.ownerStatement.statements.find(st => st.id === statementId);
+        if (!statement) return;
+        if (statement.revealedQuestions >= questionIndex + 1) return;
+        if (beast.ownerStatement.followUpCount >= beast.ownerStatement.maxFollowUps) return;
+
+        const satisfactionLoss = randomInt(3, 8);
+        const newSatisfaction = Math.max(0, beast.satisfaction - satisfactionLoss);
+
+        const credibilityBoost = randomInt(5, 12);
+        const newCredibility = Math.min(100, beast.ownerStatement.credibility + credibilityBoost);
+
+        const questionAsked = statement.followUpQuestions[questionIndex];
+        const allQuestionsRevealed = questionIndex + 1 >= statement.followUpQuestions.length;
+        const shouldRevealTruth = allQuestionsRevealed || Math.random() < 0.3 + (questionIndex * 0.2);
+
+        let newSymptoms = [...beast.symptoms];
+        let truthRevealed = statement.isTruthRevealed;
+
+        if (shouldRevealTruth) {
+          truthRevealed = true;
+          const hiddenSymptoms = getHiddenSymptomsForTruth(statement.truth, beast.allSymptoms);
+          for (const sym of hiddenSymptoms) {
+            if (!newSymptoms.includes(sym) && newSymptoms.length < 5) {
+              newSymptoms.push(sym);
+            }
+          }
+        }
+
+        const updatedStatements = beast.ownerStatement.statements.map(st => {
+          if (st.id === statementId) {
+            return {
+              ...st,
+              revealedQuestions: Math.max(st.revealedQuestions, questionIndex + 1),
+              isTruthRevealed: truthRevealed,
+            };
+          }
+          return st;
+        });
+
+        const updatedQueue = s.waitingQueue.map(b => {
+          if (b.id === beastId) {
+            return {
+              ...b,
+              satisfaction: newSatisfaction,
+              symptoms: newSymptoms,
+              ownerStatement: {
+                ...b.ownerStatement,
+                statements: updatedStatements,
+                credibility: newCredibility,
+                followUpCount: b.ownerStatement.followUpCount + 1,
+              },
+            };
+          }
+          return b;
+        });
+
+        set({ waitingQueue: updatedQueue });
+
+        let message = `追问「${questionAsked}」 满意度-${satisfactionLoss}`;
+        if (shouldRevealTruth) {
+          message += ` 发现真相！可信度+${credibilityBoost}`;
+        } else {
+          message += ` 可信度+${credibilityBoost}`;
+        }
+        get().addNotification("info", message);
+      },
+
+      toggleAcceptStatement: (beastId, statementId, accept) => {
+        const s = get();
+        const beast = s.waitingQueue.find(b => b.id === beastId);
+        if (!beast) return;
+
+        const statement = beast.ownerStatement.statements.find(st => st.id === statementId);
+        if (!statement) return;
+
+        const content = statement.isTruthRevealed ? statement.truth : statement.initialStatement;
+        const contentKey = `${statementId}-${statement.isTruthRevealed ? 'truth' : 'lie'}`;
+
+        let newAccepted = [...beast.ownerStatement.acceptedContent];
+        if (accept) {
+          if (!newAccepted.includes(contentKey)) {
+            newAccepted.push(contentKey);
+          }
+        } else {
+          newAccepted = newAccepted.filter(k => k !== contentKey);
+        }
+
+        const updatedQueue = s.waitingQueue.map(b => {
+          if (b.id === beastId) {
+            return {
+              ...b,
+              ownerStatement: {
+                ...b.ownerStatement,
+                acceptedContent: newAccepted,
+              },
+            };
+          }
+          return b;
+        });
+
+        set({ waitingQueue: updatedQueue });
+        get().addNotification("info", accept ? `已采信：${content.slice(0, 15)}...` : `已取消采信`);
+      },
+
       dismissBeast: (id) => {
         const s = get();
         const beast = s.waitingQueue.find(b => b.id === id);
@@ -310,6 +503,8 @@ export const useGameStore = create<GameState>()(
             severity: beast.severity,
             satisfaction: beast.satisfaction,
             symptoms: beast.symptoms,
+            allSymptoms: beast.allSymptoms,
+            ownerStatement: JSON.parse(JSON.stringify(beast.ownerStatement)),
           },
         } : b);
 
@@ -346,6 +541,76 @@ export const useGameStore = create<GameState>()(
         void usedPrescNames;
 
         const breed = BREEDS.find(b => b.id === (beast?.breedId || ""));
+        const ownerStmt = beast?.ownerStatement;
+
+        const acceptedContent = ownerStmt ? ownerStmt.statements
+          .filter(st => {
+            const keyTruth = `${st.id}-truth`;
+            const keyLie = `${st.id}-lie`;
+            return ownerStmt.acceptedContent.includes(keyTruth) || ownerStmt.acceptedContent.includes(keyLie);
+          })
+          .map(st => {
+            const keyTruth = `${st.id}-truth`;
+            if (ownerStmt.acceptedContent.includes(keyTruth)) {
+              return `✓ ${CATEGORY_LABELS[st.category]}：${st.truth}`;
+            }
+            return `✗ ${CATEGORY_LABELS[st.category]}：${st.initialStatement}`;
+          }) : [];
+
+        let consequence: FollowUpConsequence | null = null;
+        if (ownerStmt) {
+          const acceptedTruths = ownerStmt.statements.filter(st => 
+            ownerStmt.acceptedContent.includes(`${st.id}-truth`)
+          );
+          const acceptedLies = ownerStmt.statements.filter(st => 
+            ownerStmt.acceptedContent.includes(`${st.id}-lie`)
+          );
+          
+          if (bed.result === "success") {
+            let description = "治疗成功";
+            if (acceptedTruths.length > 0) {
+              description = `采信了 ${acceptedTruths.length} 条真相，诊断准确，治疗成功`;
+            } else if (ownerStmt.statements.length > 0 && acceptedLies.length === 0) {
+              description = "未采信主人陈述，凭借经验诊断成功";
+            }
+            consequence = {
+              type: "success",
+              description,
+            };
+          } else {
+            let description = "治疗失败";
+            let missedSymptom: string | undefined;
+            let misdiagnosedDisease: DiseaseType | undefined;
+            
+            if (acceptedLies.length > 0) {
+              const lieStmt = acceptedLies[0];
+              description = `采信了谎言「${lieStmt.initialStatement.slice(0, 15)}...」，导致误诊`;
+              const hiddenSymptoms = getHiddenSymptomsForTruth(lieStmt.truth, beast?.allSymptoms || []);
+              if (hiddenSymptoms.length > 0 && beast) {
+                missedSymptom = hiddenSymptoms.find(s => !beast.symptoms.includes(s)) || hiddenSymptoms[0];
+              }
+              misdiagnosedDisease = bed.playerDiagnosis || undefined;
+            } else if (ownerStmt.statements.length > 0 && acceptedTruths.length === 0) {
+              description = "未追问也未采信主人陈述，遗漏关键信息";
+              const unrevealedStmt = ownerStmt.statements.find(st => !st.isTruthRevealed);
+              if (unrevealedStmt && beast) {
+                const hiddenSymptoms = getHiddenSymptomsForTruth(unrevealedStmt.truth, beast.allSymptoms);
+                if (hiddenSymptoms.length > 0) {
+                  missedSymptom = hiddenSymptoms[0];
+                }
+              }
+            } else {
+              description = "治疗方案有误，未能治愈";
+            }
+            
+            consequence = {
+              type: "fail",
+              description,
+              missedSymptom,
+              misdiagnosedDisease,
+            };
+          }
+        }
 
         if (bed.result === "success" && beast && breed) {
           const severityMult = { mild: 1, moderate: 1.4, severe: 1.8, critical: 2.3 }[beast.severity] || 1;
@@ -392,6 +657,11 @@ export const useGameStore = create<GameState>()(
             daysToHeal,
             evolved,
             notes: evolved ? `${notes} 灵兽发生了进化！` : notes,
+            ownerAcceptedContent: acceptedContent,
+            ownerStatements: ownerStmt?.statements || [],
+            followUpCount: ownerStmt?.followUpCount || 0,
+            finalCredibility: ownerStmt?.credibility || 0,
+            consequence,
           };
 
           const newRel: BeastRelationship = {
@@ -432,6 +702,11 @@ export const useGameStore = create<GameState>()(
             daysToHeal: Math.max(1, Math.ceil((s.currentTime - (bed.startedAt ?? s.currentTime)) / 24) || 1),
             evolved: false,
             notes,
+            ownerAcceptedContent: acceptedContent,
+            ownerStatements: ownerStmt?.statements || [],
+            followUpCount: ownerStmt?.followUpCount || 0,
+            finalCredibility: ownerStmt?.credibility || 0,
+            consequence,
           };
 
           set(st => ({

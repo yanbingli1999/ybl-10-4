@@ -2,6 +2,7 @@ import { Clock, AlertTriangle, User, Heart, X } from "lucide-react";
 import { useGameStore } from "@/store/gameStore";
 import { BREEDS } from "@/data/gameData";
 import { SEVERITY_NAMES, SEVERITY_COLORS, SEVERITY_BORDER, DISEASE_NAMES, ELEMENT_EMOJI } from "@/data/gameData";
+import { OwnerStatementPanel } from "@/components/OwnerStatementPanel";
 
 export function WaitingQueue() {
   const queue = useGameStore(s => s.waitingQueue);
@@ -97,20 +98,29 @@ export function WaitingQueue() {
                 <span className="tabular-nums text-gray-600">{beast.satisfaction}</span>
               </div>
               {isSelected && (
-                <div className="mt-2 p-2 rounded-lg bg-clinic-jade/5 border border-clinic-jade/20 text-xs space-y-1 animate-fade">
-                  <div className="font-semibold text-clinic-deep flex items-center gap-1">
-                    <span>🩺</span> 症状表现：
+                <div className="mt-2 space-y-2 animate-fade">
+                  <div className="p-2 rounded-lg bg-clinic-jade/5 border border-clinic-jade/20 text-xs space-y-1">
+                    <div className="font-semibold text-clinic-deep flex items-center gap-1">
+                      <span>🩺</span> 症状表现：
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {beast.symptoms.map(s => (
+                        <span key={s} className="tag bg-white border border-clinic-border/60 text-clinic-deep">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                    {beast.symptoms.length < beast.allSymptoms.length && (
+                      <div className="text-[11px] text-amber-600 flex items-center gap-1 mt-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        还有 {beast.allSymptoms.length - beast.symptoms.length} 个症状未发现，追问可能揭示更多！
+                      </div>
+                    )}
+                    <div className="text-[11px] text-gray-500 italic mt-1">
+                      💡 提示：根据症状选择正确的药材组合才能治愈哦
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1">
-                    {beast.symptoms.map(s => (
-                      <span key={s} className="tag bg-white border border-clinic-border/60 text-clinic-deep">
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="text-[11px] text-gray-500 italic mt-1">
-                    💡 提示：根据症状选择正确的药材组合才能治愈哦
-                  </div>
+                  <OwnerStatementPanel beast={beast} />
                 </div>
               )}
             </div>

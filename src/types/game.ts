@@ -22,6 +22,33 @@ export type BedStatus = "empty" | "occupied" | "cleaning";
 
 export type TreatmentResult = "pending" | "success" | "fail" | "worsen";
 
+export type StatementCategory = "feeding" | "injury" | "onset_time";
+
+export interface OwnerStatement {
+  id: string;
+  category: StatementCategory;
+  initialStatement: string;
+  truth: string;
+  isTruthRevealed: boolean;
+  followUpQuestions: string[];
+  revealedQuestions: number;
+}
+
+export interface OwnerStatementState {
+  statements: OwnerStatement[];
+  credibility: number;
+  followUpCount: number;
+  maxFollowUps: number;
+  acceptedContent: string[];
+}
+
+export interface FollowUpConsequence {
+  type: "success" | "fail" | "missed_disease";
+  description: string;
+  missedSymptom?: string;
+  misdiagnosedDisease?: DiseaseType;
+}
+
 export interface Breed {
   id: string;
   name: string;
@@ -60,11 +87,13 @@ export interface Beast {
   disease: DiseaseType;
   severity: Severity;
   symptoms: string[];
+  allSymptoms: string[];
   trustLevel: number;
   waitHours: number;
   satisfaction: number;
   ownerName: string;
   arrivedAt: number;
+  ownerStatement: OwnerStatementState;
 }
 
 export interface Staff {
@@ -98,6 +127,8 @@ export interface Bed {
     severity: Severity;
     satisfaction: number;
     symptoms: string[];
+    allSymptoms: string[];
+    ownerStatement: OwnerStatementState;
   } | null;
 }
 
@@ -126,6 +157,11 @@ export interface MedicalRecord {
   daysToHeal: number;
   evolved: boolean;
   notes: string;
+  ownerAcceptedContent: string[];
+  ownerStatements: OwnerStatement[];
+  followUpCount: number;
+  finalCredibility: number;
+  consequence: FollowUpConsequence | null;
 }
 
 export interface Transaction {
