@@ -51,7 +51,7 @@ export function OwnerStatementPanel({ beast }: OwnerStatementPanelProps) {
 
   const handleToggleAccept = (stmt: OwnerStatement, acceptTruth: boolean) => {
     const isCurrentlyAccepted = isAccepted(stmt, acceptTruth);
-    toggleAcceptStatement(beast.id, stmt.id, !isCurrentlyAccepted);
+    toggleAcceptStatement(beast.id, stmt.id, acceptTruth, !isCurrentlyAccepted);
   };
 
   return (
@@ -107,7 +107,7 @@ export function OwnerStatementPanel({ beast }: OwnerStatementPanelProps) {
                 hasTruth
                   ? "border-emerald-300/50 bg-white/80"
                   : "border-gray-200 bg-white/60"
-              } ${lieAccepted && !hasTruth ? "ring-2 ring-amber-400" : ""}
+              } ${lieAccepted ? "ring-2 ring-amber-400" : ""}
               ${truthAccepted ? "ring-2 ring-emerald-400" : ""}`}
             >
               <div
@@ -131,12 +131,12 @@ export function OwnerStatementPanel({ beast }: OwnerStatementPanelProps) {
                 </div>
 
                 <div className="mt-1.5 space-y-1">
-                  <div className={`flex items-start gap-1.5 ${lieAccepted && !hasTruth ? "text-amber-700 font-medium" : "text-gray-600"}`}>
+                  <div className={`flex items-start gap-1.5 ${lieAccepted ? "text-amber-700 font-medium" : "text-gray-600"}`}>
                     <EyeOff className="w-3 h-3 flex-shrink-0 mt-0.5 text-gray-400" />
                     <span className="text-[11px] leading-relaxed">
                       「{stmt.initialStatement}」
                     </span>
-                    {lieAccepted && !hasTruth && (
+                    {lieAccepted && (
                       <Check className="w-3 h-3 text-amber-500 flex-shrink-0 mt-0.5" />
                     )}
                   </div>
@@ -198,13 +198,13 @@ export function OwnerStatementPanel({ beast }: OwnerStatementPanelProps) {
                       <button
                         onClick={(e) => { e.stopPropagation(); handleToggleAccept(stmt, false); }}
                         className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[10px] font-medium transition-all ${
-                          lieAccepted && !hasTruth
+                          lieAccepted
                             ? "bg-amber-500 text-white"
                             : "bg-gray-100 text-gray-600 hover:bg-amber-100 hover:text-amber-700"
                         }`}
                       >
-                        {lieAccepted && !hasTruth ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                        采信陈述
+                        {lieAccepted ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                        采信原话
                       </button>
                       {hasTruth && (
                         <button

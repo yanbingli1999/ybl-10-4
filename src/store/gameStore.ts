@@ -216,7 +216,7 @@ export interface GameState {
   resetGame: () => void;
   tickGame: (steps?: number) => void;
   followUpQuestion: (beastId: string, statementId: string, questionIndex: number) => void;
-  toggleAcceptStatement: (beastId: string, statementId: string, accept: boolean) => void;
+  toggleAcceptStatement: (beastId: string, statementId: string, acceptTruth: boolean, accept: boolean) => void;
   _spawnInitialBeasts: () => void;
   _addTransaction: (type: Transaction["type"], category: string, amount: number, description: string) => void;
   _dailySettlement: () => void;
@@ -381,7 +381,7 @@ export const useGameStore = create<GameState>()(
         get().addNotification("info", message);
       },
 
-      toggleAcceptStatement: (beastId, statementId, accept) => {
+      toggleAcceptStatement: (beastId, statementId, acceptTruth, accept) => {
         const s = get();
         const beast = s.waitingQueue.find(b => b.id === beastId);
         if (!beast) return;
@@ -389,8 +389,8 @@ export const useGameStore = create<GameState>()(
         const statement = beast.ownerStatement.statements.find(st => st.id === statementId);
         if (!statement) return;
 
-        const content = statement.isTruthRevealed ? statement.truth : statement.initialStatement;
-        const contentKey = `${statementId}-${statement.isTruthRevealed ? 'truth' : 'lie'}`;
+        const contentKey = `${statementId}-${acceptTruth ? 'truth' : 'lie'}`;
+        const content = acceptTruth ? statement.truth : statement.initialStatement;
 
         let newAccepted = [...beast.ownerStatement.acceptedContent];
         if (accept) {
